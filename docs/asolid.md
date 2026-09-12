@@ -90,6 +90,8 @@ checks the eight-byte `PROTOCOL` tag at `0x685` and consumes these fields:
 | `0x69d` | Big-endian 32-bit | Capacity in MiB; `0x43497c`, shifted by 11 for 512-byte sectors at `0x4349cd` |
 | `0x6a5` | 10 ASCII bytes | MPTool version; copied at `0x434db0` |
 | `0x6af` | 32 ASCII bytes | Programming timestamp; copied at `0x434de0` |
+| `0x6fd` | Byte | Recorded CE count; written at `0x460162..0x46016f` |
+| `0x6fe` | Byte | Recorded NAND LUNs per CE; written at `0x460175..0x460193` |
 
 The configuration construction code at `0x45fd45` takes MPTool's version
 string (`241121A_S1` at `0x69169c` in this executable) and stores it at
@@ -119,6 +121,42 @@ overprovisioning, cache, or physical topology settings. Full manufacturing
 settings and NAND tables would require further protocol work; the MPTool
 paths inspected for those involve mode changes and are not used here.
 
+## Recorded topology and capacity estimate
+
+The protocol builder copies device-context byte `0x12e9b` into `0x6fd`.
+The same byte is logged as **CE count** at `0x449bae..0x449bcc`, using
+the format string at `0x69de1c`. The accompanying die count is that value
+multiplied by AFMI byte `0x44`, labeled `u8LUNCount` in the AFMI dump
+(string file offset `0x2a739c`). The builder copies this AFMI byte into
+`0x6fe`, substituting 1 if zero. The captured values are **2 CEs** and
+**1 NAND LUN per CE**, giving **2 configured dies** by MPTool's calculation.
+These are recorded configuration values, not physical package inspection.
+The decoder accepts counts from 1 to 16; zero, erased `ff`, and values
+outside this supported range remain unknown. It does not substitute counts
+for missing fields or derive them from the number of returned ID slots.
+
+CE count does not establish independent channel count. MPTool's separate
+`FlashChannel` INI setting is loaded into settings byte `0x1a54` at
+`0x411696..0x4116bf`. The packaged defaults (`FlashChannel=0`,
+`ExtraReserve=4`, `HiddenAreaSize=0`) do not identify this drive's settings.
+AFMI's `u8PlaneNum` byte `0x79` is also copied into protocol `0x6fc`, which
+contains `01` here; its encoding is not yet decoded as a physical plane count.
+
+For identical returned NAND IDs, if all matching database candidates agree
+on an explicit `die_capacity_bytes`, veryflashy estimates raw main-data
+capacity as configured dies times per-die density. It never substitutes
+package-level `capacity_bytes`. Missing counts/capacity, mixed IDs, unknown
+or conflicting die densities, and inferred raw capacity below programmed
+capacity suppress the estimate. The estimate does not require a new command.
+
+For this capture, assuming two 128 GiB B58R dies gives 256 GiB raw and a
+**25.0625 GiB gap (9.79% of raw)** from the 230.9375 GiB exposed capacity.
+This is not a measurement of free replacement blocks, extra reserve,
+hidden user area or SLC cache; it does not split internal allocations.
+NAND OOB/spare bytes are excluded from this calculation. Channel count,
+reserve allocation, hidden area, SLC cache and bad-block counts remain
+explicitly unknown in the output.
+
 ## Captured result
 
 The data-in responses are preserved in `tests/fixtures/asolid.json`, with
@@ -140,6 +178,14 @@ Recorded firmware: 18002SM3U_4A1005
 Recorded MPTool version: 241108A
 Recorded programming timestamp (timezone unknown): 2025-09-21 18:20:18
 Programmed capacity: 236480 MiB (247967252480 bytes)
+Recorded chip-enable count (CE): 2
+Recorded NAND LUNs per CE: 1
+Configured die count (CE x LUNs per CE): 2
+Independent NAND channels: unknown
+Reserve allocation, hidden area, SLC cache and bad-block counts: unknown
+Estimated raw NAND capacity: 256 GiB (assuming 2 dies x 128 GiB from NAND database)
+Estimated raw-to-user capacity gap: 25.0625 GiB (9.79% of raw; 26910654464 bytes)
+This gap does not identify how capacity is allocated internally; NAND OOB is excluded.
 ```
 
 The code-information trailer is ASCII `405`; its meaning is unverified.
@@ -170,3 +216,5 @@ unsupported firmware modes, short/invalid replies, empty slots, errors
 and CLI routing without accessing USB devices. Additional tests cover model
 selection, configuration decoding, descriptor bounds, malformed text, erased
 fields, and preservation of NAND decoding when optional queries fail.
+Topology tests also cover missing/invalid counts, mixed NAND IDs, ambiguous
+or package-only density, and inconsistent or equal capacities.

@@ -6,6 +6,7 @@ See docs/asolid.md for the protocol and the hardware capture used to verify it.
 from py_sg import SCSIError
 
 from .common import bytesy, sgread
+from . import nand
 
 
 def _ascii_field(data: bytes, offset: int, size: int):
@@ -39,6 +40,9 @@ def decode_protocol(data: bytes) -> dict:
     if data[:2] != b'\x12\x01':
         raise ValueError('Missing protocol USB device descriptor')
     capacity = int.from_bytes(data[0x69d:0x6a1], 'big')
+    # Recorded CE/LUN counts, not ID-slot counts or independent channels.
+    ce_count = data[0x6fd] if 1 <= data[0x6fd] <= 16 else None
+    luns_per_ce = data[0x6fe] if 1 <= data[0x6fe] <= 16 else None
     return {
         'usb_id': f'{int.from_bytes(data[8:10], "little"):04x}:'
                   f'{int.from_bytes(data[10:12], "little"):04x}',
@@ -49,10 +53,55 @@ def decode_protocol(data: bytes) -> dict:
         'capacity_mib': None if capacity in (0, 0xffffffff) else capacity,
         'mp_version': _ascii_field(data, 0x6a5, 10),
         'mp_timestamp': _ascii_field(data, 0x6af, 32),
+        'ce_count': ce_count,
+        'luns_per_ce': luns_per_ce,
+        'configured_die_count': ce_count * luns_per_ce if ce_count and luns_per_ce else None,
     }
 
 
-def _read_details(fd: int):
+def _print_topology(info: dict, flashids: list[bytes]):
+    for key, label in (('ce_count', 'Recorded chip-enable count (CE)'),
+                       ('luns_per_ce', 'Recorded NAND LUNs per CE'),
+                       ('configured_die_count', 'Configured die count (CE x LUNs per CE)')):
+        value = info[key]
+        print(f'  {label}: {value if value is not None else "unknown"}')
+    print('  Independent NAND channels: unknown')
+    print('  Reserve allocation, hidden area, SLC cache and bad-block counts: unknown')
+
+    # Estimate only for a homogeneous ID and unanimous per-die database
+    # density. Package capacity_bytes is deliberately not used as die size.
+    reason = None
+    die_bytes = None
+    if not info['configured_die_count'] or info['capacity_mib'] is None:
+        reason = 'missing recorded topology or capacity'
+    elif not flashids or len(set(flashids)) != 1:
+        reason = 'missing or mixed NAND IDs'
+    else:
+        candidates = nand.decode(flashids[0])['candidates']
+        densities = {c.get('die_capacity_bytes') for c in candidates}
+        if len(densities) == 1:
+            die_bytes = next(iter(densities))
+        if not isinstance(die_bytes, int) or die_bytes <= 0:
+            reason = 'unknown or ambiguous per-die NAND density'
+    if reason:
+        print(f'  Capacity-gap estimate unavailable: {reason}')
+        return
+
+    dies = info['configured_die_count']
+    raw_bytes = dies * die_bytes
+    exposed_bytes = info['capacity_mib'] * 2**20
+    if raw_bytes < exposed_bytes:
+        print('  Capacity-gap estimate unavailable: inferred raw capacity is below programmed capacity')
+        return
+    gap_bytes = raw_bytes - exposed_bytes
+    print(f'  Estimated raw NAND capacity: {raw_bytes / 2**30:g} GiB '
+          f'(assuming {dies} dies x {die_bytes / 2**30:g} GiB from NAND database)')
+    print(f'  Estimated raw-to-user capacity gap: {gap_bytes / 2**30:g} GiB '
+          f'({100 * gap_bytes / raw_bytes:.2f}% of raw; {gap_bytes} bytes)')
+    print('  This gap does not identify how capacity is allocated internally; NAND OOB is excluded.')
+
+
+def _read_details(fd: int, flashids: list[bytes]):
     # Only called after recognizing 18002S. These optional reads must not
     # prevent NAND decoding if an older firmware rejects them.
     print('Reading ASolid controller model registers:')
@@ -92,6 +141,7 @@ def _read_details(fd: int):
     if info['capacity_mib'] is not None:
         mib = info['capacity_mib']
         print(f'  Programmed capacity: {mib} MiB ({mib * 1048576} bytes)')
+    _print_topology(info, flashids)
 
 
 def probe(fd: int):
@@ -140,6 +190,6 @@ def probe(fd: int):
 
     if not flashids:
         raise RuntimeError('ASolid returned no usable NAND IDs')
-    _read_details(fd)
+    _read_details(fd, flashids)
     # Preserve every displayed ID byte for the offline decoder.
     return flashids[0]

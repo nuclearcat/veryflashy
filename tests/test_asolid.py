@@ -39,6 +39,12 @@ class ASolidTests(unittest.TestCase):
         self.assertIn('Recorded MPTool version: 241108A', output)
         self.assertIn('2025-09-21 18:20:18', output)
         self.assertIn('236480 MiB (247967252480 bytes)', output)
+        self.assertIn('Recorded chip-enable count (CE): 2', output)
+        self.assertIn('Recorded NAND LUNs per CE: 1', output)
+        self.assertIn('Configured die count (CE x LUNs per CE): 2', output)
+        self.assertIn('Estimated raw NAND capacity: 256 GiB', output)
+        self.assertIn('25.0625 GiB (9.79% of raw; 26910654464 bytes)', output)
+        self.assertIn('Independent NAND channels: unknown', output)
         self.assertIn('slot 0): 2c-d3-08-32-e8-30-12', output)
         self.assertIn('slot 2): 2c-d3-08-32-e8-30-12', output)
         self.assertEqual(output.count('Flash ID (slot'), 2)
@@ -85,6 +91,8 @@ class ASolidTests(unittest.TestCase):
         self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
         self.assertEqual(self.output.getvalue().count('Flash ID (slot'), 1)
         self.assertIn('slot 2)', self.output.getvalue())
+        # A single returned ID is not evidence of a single physical die.
+        self.assertIn('Configured die count (CE x LUNs per CE): 2', self.output.getvalue())
 
     def test_invalid_nand_response(self):
         for ids in (b'', IDS[:127], b'\0' * 512, b'\xff' * 512):
@@ -130,6 +138,7 @@ class ProtocolTests(unittest.TestCase):
             'serial': '000000000000000000000001', 'firmware': '18002SM3U_4A1005',
             'capacity_mib': 236480, 'mp_version': '241108A',
             'mp_timestamp': '2025-09-21 18:20:18',
+            'ce_count': 2, 'luns_per_ce': 1, 'configured_die_count': 2,
         })
 
     def test_short_wrong_tag_and_wrong_descriptor(self):
@@ -165,10 +174,59 @@ class ProtocolTests(unittest.TestCase):
     def test_absent_fields_are_not_invented(self):
         for fill in (0, 255):
             data = bytearray(PROTOCOL)
-            for offset, length in ((0x214, 12), (0x68d, 16), (0x69d, 4), (0x6a5, 42)):
+            for offset, length in ((0x214, 12), (0x68d, 16), (0x69d, 4),
+                                   (0x6a5, 42), (0x6fd, 2)):
                 data[offset:offset + length] = bytes([fill]) * length
             info = asolid.decode_protocol(data)
             self.assertTrue(all(value is None for key, value in info.items() if key != 'usb_id'))
+
+    def test_missing_or_invalid_counts_do_not_produce_die_count(self):
+        for offset in (0x6fd, 0x6fe):
+            for count in (0, 17, 255):
+                with self.subTest(offset=offset, count=count):
+                    data = bytearray(PROTOCOL)
+                    data[offset] = count
+                    self.assertIsNone(asolid.decode_protocol(data)['configured_die_count'])
+
+
+class TopologyTests(unittest.TestCase):
+    def setUp(self):
+        self.output = io.StringIO()
+        self.enterContext(contextlib.redirect_stdout(self.output))
+        self.info = asolid.decode_protocol(PROTOCOL)
+        self.ids = [IDS[:7]]
+
+    def test_unknown_mixed_and_package_densities_do_not_produce_estimate(self):
+        candidates = ([], [{'capacity_bytes': 128 * 2**30}],
+                      [{'die_capacity_bytes': 128 * 2**30}, {}],
+                      [{'die_capacity_bytes': 128 * 2**30}, {'die_capacity_bytes': 64 * 2**30}])
+        for matches in candidates:
+            with self.subTest(matches=matches):
+                self.output.seek(0)
+                self.output.truncate()
+                with patch('veryflashy.asolid.nand.decode', return_value={'candidates': matches}):
+                    asolid._print_topology(self.info, self.ids)
+                self.assertIn('estimate unavailable:', self.output.getvalue())
+                self.assertNotIn('Estimated raw NAND capacity:', self.output.getvalue())
+
+    def test_mixed_ids_are_not_assumed_to_have_the_first_ids_density(self):
+        asolid._print_topology(self.info, [IDS[:7], bytes.fromhex('ecda109544')])
+        self.assertIn('missing or mixed NAND IDs', self.output.getvalue())
+        self.assertNotIn('Estimated raw NAND capacity:', self.output.getvalue())
+
+    def test_missing_topology_and_inconsistent_capacity(self):
+        self.info['configured_die_count'] = None
+        asolid._print_topology(self.info, self.ids)
+        self.assertIn('missing recorded topology or capacity', self.output.getvalue())
+        self.info['configured_die_count'] = 1
+        asolid._print_topology(self.info, self.ids)
+        self.assertIn('inferred raw capacity is below programmed capacity', self.output.getvalue())
+        self.assertNotIn('Estimated raw-to-user capacity gap:', self.output.getvalue())
+
+    def test_equal_capacity_is_a_valid_zero_gap(self):
+        self.info['capacity_mib'] = 256 * 1024
+        asolid._print_topology(self.info, self.ids)
+        self.assertIn('0 GiB (0.00% of raw; 0 bytes)', self.output.getvalue())
 
 
 class CLITests(unittest.TestCase):
