@@ -30,6 +30,16 @@ measurement of this drive's usable capacity or physical package arrangement.
 
 ## Matching and limits
 
+Micron's product data lists `128Gb x8` as the component configuration and
+`1Tb` as the total component density. The x8 organization is already
+included in that total; it must not multiply the 1 Tbit density again.
+Using the nominal binary NAND density, `128 * 2^30` eight-bit locations
+hold **137438953472 bytes (128 GiB)** per die. Two such dies therefore
+give **256 GiB (274.877906944 decimal GB)** nominal main-data capacity,
+excluding NAND OOB/spare bytes. A USB drive advertised as **256 GB** uses
+a separate decimal capacity basis; see the
+[captured drive's capacity comparison](asolid.md#advertised-gb-versus-nominal-nand-gib).
+
 The curated entry requires all seven observed bytes. Six-byte queries and
 other seventh-byte variants do not receive this candidate. This deliberately
 limits the entry to the observed variant even though public reports use the

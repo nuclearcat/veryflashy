@@ -157,6 +157,34 @@ NAND OOB/spare bytes are excluded from this calculation. Channel count,
 reserve allocation, hidden area, SLC cache and bad-block counts remain
 explicitly unknown in the output.
 
+### Advertised GB versus nominal NAND GiB
+
+The owner reports that this drive is branded **256 GB**. That label uses
+decimal capacity: `1 GB = 1,000,000,000 bytes`, as explained in
+[Kingston's Flash Memory Guide](https://media.kingston.com/pdfs/MKF-283.3-Flash-Memory-Guide_EN.pdf).
+Here, `1 GiB = 1,073,741,824 bytes`. The nominal NAND estimate uses the
+[Micron die density](micron-b58r.md), while the exposed capacity comes from
+the controller's SCSI response, before filesystem overhead.
+
+| Capacity basis | Bytes | Decimal GB | Binary GiB |
+| --- | ---: | ---: | ---: |
+| Estimated two 128 GiB NAND dies | 274877906944 | 274.877907 | 256 |
+| Owner-reported advertised capacity | 256000000000 | 256 | 238.418579 |
+| Controller-exposed capacity | 247967252480 | 247.967252 | 230.9375 |
+
+These give two different comparisons:
+
+* Advertised minus exposed: **8032747520 bytes**, or **8.03274752 GB**
+  (7.4810791 GiB), **3.137792% of advertised capacity**.
+* Estimated raw NAND minus exposed: **26910654464 bytes**, or
+  **25.0625 GiB**, **9.7900391% of estimated raw capacity**.
+
+The printed 9.79% uses estimated raw NAND as its denominator. It is not
+the shortfall from the 256 GB label or a measured reserve percentage.
+The advertised capacity is owner-supplied context, not a field recovered
+from MPTool or SCSI; veryflashy does not infer a marketing capacity from
+VID/PID, round up the measured capacity, or use this example for other drives.
+
 ## Captured result
 
 The data-in responses are preserved in `tests/fixtures/asolid.json`, with
