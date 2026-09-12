@@ -9,7 +9,7 @@ and can extract the NAND flash chip IDs from most of them:
 
 | Manufacturer | Controller chip(s) | Flash chip ID? | Other features |
 |:--------|:-----------:|:-------------:|:------------:|
-| ASolid | IS918 family, tested with 18002S firmware | ✓ | Firmware identifier/date; [protocol and support limits](docs/asolid.md) |
+| ASolid | IS918 family, tested with 18002S firmware | ✓ | Model heuristic, firmware, programmed USB identity/capacity and MPTool metadata; [protocol and support limits](docs/asolid.md) |
 | Phison | PS23xx | ✓ | Controller chip ID, controller firmware version, [partitioning info](https://gist.github.com/warewolf/e19d6817f1d59939a32fbd9e1a30b9d2) |
 | Alcor | AU698x | ✓ | |
 | AppoTech | DM82xx | ✓ | |
@@ -53,9 +53,10 @@ See [decoder coverage, licenses and update instructions](docs/nand-decoder.md).
 
 For ASolid drives, use `sudo uv run veryflashy -m asolid /dev/sdX`, or leave
 out `-m` for automatic detection. The detector checks the extended SCSI
-INQUIRY signature before issuing ASolid commands. NAND IDs are currently
-queried only for the tested `18002S` firmware family. Other ASolid firmware
-is reported without trying unverified NAND-ID commands or changing modes.
+INQUIRY signature before issuing ASolid commands. NAND IDs, model registers
+and programmed configuration are queried only for the tested `18002S`
+firmware family. Other ASolid firmware is reported without trying unverified
+NAND-ID commands or changing modes.
 The exact controller suffix and NAND part number are not inferred from the
 USB ID. See [the ASolid protocol notes](docs/asolid.md) for a captured example.
 

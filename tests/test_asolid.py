@@ -14,6 +14,9 @@ from veryflashy import __main__ as cli
 CAPTURE = json.loads((Path(__file__).parent / 'fixtures' / 'asolid.json').read_text())
 INQUIRY, INFO, IDS = (bytes.fromhex(CAPTURE[name]['data_hex'])
                       for name in ('inquiry', 'firmware_info', 'nand_ids'))
+DETAILS = [bytes.fromhex(CAPTURE[name]['data_hex'])
+           for name in ('register_c1c0', 'register_c1d3', 'protocol')]
+PROTOCOL = DETAILS[-1]
 
 
 class ASolidTests(unittest.TestCase):
@@ -23,15 +26,19 @@ class ASolidTests(unittest.TestCase):
         self.read = self.enterContext(patch('veryflashy.asolid.sgread'))
 
     def test_capture_replay(self):
-        self.read.side_effect = [INQUIRY, INFO, IDS]
+        self.read.side_effect = [INQUIRY, INFO, IDS, *DETAILS]
         self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
         self.assertEqual(self.read.call_args_list, [
             unittest.mock.call(7, bytes.fromhex(CAPTURE[name]['cdb']), size)
-            for name, size in (('inquiry', 96), ('firmware_info', 512), ('nand_ids', 512))
+            for name, size in (('inquiry', 96), ('firmware_info', 512), ('nand_ids', 512),
+                               ('register_c1c0', 1), ('register_c1d3', 1), ('protocol', 4096))
         ])
         output = self.output.getvalue()
         self.assertIn('18002SM3U_4A1005_Oct 25 2024', output)
-        self.assertIn('exact chip model unknown', output)
+        self.assertIn('IS918-EN (MPTool register heuristic)', output)
+        self.assertIn('Recorded MPTool version: 241108A', output)
+        self.assertIn('2025-09-21 18:20:18', output)
+        self.assertIn('236480 MiB (247967252480 bytes)', output)
         self.assertIn('slot 0): 2c-d3-08-32-e8-30-12', output)
         self.assertIn('slot 2): 2c-d3-08-32-e8-30-12', output)
         self.assertEqual(output.count('Flash ID (slot'), 2)
@@ -69,12 +76,12 @@ class ASolidTests(unittest.TestCase):
                 self.assertEqual(self.read.call_count, 2)
 
     def test_zero_padded_firmware_response(self):
-        self.read.side_effect = [INQUIRY, INFO.ljust(512, b'\0'), IDS]
+        self.read.side_effect = [INQUIRY, INFO.ljust(512, b'\0'), IDS, *DETAILS]
         self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
 
     def test_id_in_later_slot_and_ff_padding(self):
         data = b'\xff' * 8 + b'\0' * 8 + IDS[16:24] + b'\xff' * 104
-        self.read.side_effect = [INQUIRY, INFO, data]
+        self.read.side_effect = [INQUIRY, INFO, data, *DETAILS]
         self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
         self.assertEqual(self.output.getvalue().count('Flash ID (slot'), 1)
         self.assertIn('slot 2)', self.output.getvalue())
@@ -94,6 +101,75 @@ class ASolidTests(unittest.TestCase):
                 with self.assertRaises(SCSIError):
                     asolid.probe(7)
 
+    def test_model_selection_matches_mptool(self):
+        for c1c0, c1d3, model in ((0, 0, 'IS918-EN'), (0xa1, 0, 'IS818-EN'),
+                                  (0, 0x33, 'IS918-ENX'), (0xa1, 0x33, 'IS918-ENX')):
+            with self.subTest(model=model, c1c0=c1c0):
+                self.output.seek(0)
+                self.output.truncate()
+                self.read.side_effect = [INQUIRY, INFO, IDS, bytes([c1c0]), bytes([c1d3]), PROTOCOL]
+                asolid.probe(7)
+                self.assertIn(f'{model} (MPTool register heuristic)', self.output.getvalue())
+
+    def test_optional_read_failures_preserve_nand_decoding(self):
+        error = SCSIError(2, 0, 8, b'\x70', b'')
+        for details in ([error, PROTOCOL], [b'', PROTOCOL], [b'\0', error, PROTOCOL],
+                        [b'\0', b'\0', error], [b'\0', b'\0', b'']):
+            with self.subTest(details=details[:2]):
+                self.output.seek(0)
+                self.output.truncate()
+                self.read.side_effect = [INQUIRY, INFO, IDS, *details]
+                self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
+                self.assertIn('unavailable:', self.output.getvalue())
+
+
+class ProtocolTests(unittest.TestCase):
+    def test_captured_configuration(self):
+        self.assertEqual(asolid.decode_protocol(PROTOCOL), {
+            'usb_id': '0951:1666', 'manufacturer': 'Kingston', 'product': 'DataTraveler 3.0',
+            'serial': '000000000000000000000001', 'firmware': '18002SM3U_4A1005',
+            'capacity_mib': 236480, 'mp_version': '241108A',
+            'mp_timestamp': '2025-09-21 18:20:18',
+        })
+
+    def test_short_wrong_tag_and_wrong_descriptor(self):
+        for data in (PROTOCOL[:4095], PROTOCOL + b'\0', b'\0' * 4096,
+                     PROTOCOL.replace(b'PROTOCOL', b'UNKNOWN!'), b'\0\0' + PROTOCOL[2:]):
+            with self.subTest(length=len(data)):
+                with self.assertRaises(ValueError):
+                    asolid.decode_protocol(data)
+
+    def test_invalid_string_pointers_and_lengths(self):
+        for entry in ('ffff0022', '01ff0022', '007d0001', '007d0021', '007d0020', '007d0100'):
+            with self.subTest(entry=entry):
+                data = bytearray(PROTOCOL)
+                data[0x214:0x218] = bytes.fromhex(entry)
+                with self.assertRaises(ValueError):
+                    asolid.decode_protocol(data)
+
+    def test_usb_strings_are_utf16_and_reject_controls_and_bad_encoding(self):
+        data = bytearray(PROTOCOL)
+        data[0xbf:0xc1] = '北'.encode('utf-16le')
+        self.assertEqual(asolid.decode_protocol(data)['manufacturer'], '北ingston')
+        for bad in (b'\x1b\x00', b'\x00\xd8'):
+            data[0xbf:0xc1] = bad
+            with self.assertRaises(ValueError):
+                asolid.decode_protocol(data)
+
+    def test_nonprintable_ascii_rejected(self):
+        data = bytearray(PROTOCOL)
+        data[0x6a6] = 0x1b
+        with self.assertRaises(ValueError):
+            asolid.decode_protocol(data)
+
+    def test_absent_fields_are_not_invented(self):
+        for fill in (0, 255):
+            data = bytearray(PROTOCOL)
+            for offset, length in ((0x214, 12), (0x68d, 16), (0x69d, 4), (0x6a5, 42)):
+                data[offset:offset + length] = bytes([fill]) * length
+            info = asolid.decode_protocol(data)
+            self.assertTrue(all(value is None for key, value in info.items() if key != 'usb_id'))
+
 
 class CLITests(unittest.TestCase):
     def setUp(self):
@@ -109,14 +185,14 @@ class CLITests(unittest.TestCase):
                        for name, module in cli.models.items() if name != 'asolid']
 
     def test_auto_detection_stops_at_asolid(self):
-        self.read.side_effect = [INQUIRY, INFO, IDS]
+        self.read.side_effect = [INQUIRY, INFO, IDS, *DETAILS]
         with patch('sys.argv', ['veryflashy', '/dev/fake']):
             cli.main()
         for probe in self.others:
             probe.assert_not_called()
 
     def test_explicit_asolid(self):
-        self.read.side_effect = [INQUIRY, INFO, IDS]
+        self.read.side_effect = [INQUIRY, INFO, IDS, *DETAILS]
         with patch('sys.argv', ['veryflashy', '-m', 'asolid', '/dev/fake']):
             cli.main()
         self.assertIn('2c-d3-08-32-e8-30-12', self.output.getvalue())
@@ -142,7 +218,7 @@ class CLITests(unittest.TestCase):
             probe.assert_not_called()
 
     def test_lookup_uses_offline_database(self):
-        self.read.side_effect = [INQUIRY, INFO, IDS]
+        self.read.side_effect = [INQUIRY, INFO, IDS, *DETAILS]
         with patch('sys.argv', ['veryflashy', '-l', '/dev/fake']):
             cli.main()
         self.assertIn('Manufacturer: Micron', self.output.getvalue())
