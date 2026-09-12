@@ -1,0 +1,25 @@
+{
+  "license": "GPL-3.0-or-later",
+  "sources": {
+    "micron-b58r": {
+      "description": "Independently authored factual identification; see docs/micron-b58r.md",
+      "references": [
+        "https://www.micron.com/products/storage/nand-flash/3d-nand/part-catalog/part-detail/mt29f1t08eblchd4-r-c",
+        "https://forum.acelab.eu.com/viewtopic.php?f=179&t=11541",
+        "https://www.techinsights.com/products/tcr-2303-802"
+      ],
+      "observed_id": "2cd30832e83012"
+    }
+  },
+  "records": [
+    {
+      "pattern": [44, 211, 8, 50, 232, 48, 18],
+      "description": "MT29F1T08EBLCH",
+      "source": "micron-b58r",
+      "family": "B58R",
+      "cell_type": "TLC",
+      "layers": 232,
+      "die_capacity_bytes": 137438953472
+    }
+  ]
+}

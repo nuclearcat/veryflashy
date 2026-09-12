@@ -8,8 +8,23 @@ from veryflashy import __main__ as cli
 
 
 class DecoderTests(unittest.TestCase):
-    def test_captured_asolid_id_does_not_get_legacy_d3_capacity(self):
-        for value in ('2cd30832e830', '2cd30832e83012'):
+    def test_captured_asolid_id_identifies_b58r_with_per_die_density(self):
+        result = nand.decode(bytes.fromhex('2cd30832e83012'))
+        self.assertEqual(result['manufacturer']['name'], 'Micron')
+        self.assertEqual(len(result['candidates']), 1)
+        part = result['candidates'][0]
+        self.assertEqual(part['description'], 'MT29F1T08EBLCH')
+        self.assertEqual(part['family'], 'B58R')
+        self.assertEqual(part['cell_type'], 'TLC')
+        self.assertEqual(part['layers'], 232)
+        self.assertEqual(part['die_capacity_bytes'], 128 * 1024**3)
+        self.assertEqual(part['matched_bytes'], 7)
+        self.assertNotIn('capacity_bytes', part)
+        self.assertNotIn('die_count', part)
+
+    def test_incomplete_or_different_micron_ids_do_not_inherit_b58r(self):
+        for value in ('2cd30832e830', '2cd30832e83002', '2cd30832e83112',
+                      '2cd30c32ea3012'):
             result = nand.decode(bytes.fromhex(value))
             self.assertEqual(result['manufacturer']['name'], 'Micron')
             self.assertEqual(result['candidates'], [])
@@ -63,16 +78,20 @@ class DecoderTests(unittest.TestCase):
         import json
         from importlib.resources import files
         sources = json.loads(files('veryflashy').joinpath('data/nand-sources.json').read_text())
-        self.assertEqual(len(db['records']), 158)
+        sources.update(db['curated_sources'])
+        self.assertEqual(len(db['records']), 159)
         for record in db['records']:
-            with self.subTest(source=record['source'], line=record['line']):
+            with self.subTest(source=record['source'], line=record.get('line')):
                 self.assertIn(record['source'], sources)
-                self.assertGreater(record['line'], 0)
+                if 'line' in record:
+                    self.assertGreater(record['line'], 0)
+                else:
+                    self.assertTrue(sources[record['source']]['references'])
                 self.assertTrue(2 <= len(record['pattern']) <= 8)
                 value = bytes(v if v is not None else 0 for v in record['pattern'])
                 found = nand.decode(value)['candidates']
                 self.assertTrue(any(r['source'] == record['source'] and
-                                    r['line'] == record['line'] for r in found))
+                                    r.get('line') == record.get('line') for r in found))
 
 
 class OfflineCLITests(unittest.TestCase):
@@ -89,7 +108,9 @@ class OfflineCLITests(unittest.TestCase):
         self.open.assert_not_called()
         self.read.assert_not_called()
         self.assertIn('Manufacturer: Micron', self.output.getvalue())
-        self.assertIn('remain unknown', self.output.getvalue())
+        self.assertIn('MT29F1T08EBLCH', self.output.getvalue())
+        self.assertIn('B58R | 232-layer TLC | 128 GiB raw/die', self.output.getvalue())
+        self.assertIn('physical die count remain unknown', self.output.getvalue())
 
     def test_invalid_arguments_never_open_a_device(self):
         for args in ([], ['--decode-id', 'xyz'],

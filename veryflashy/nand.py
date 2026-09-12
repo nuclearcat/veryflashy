@@ -16,7 +16,12 @@ def parse_id(value):
 
 @lru_cache(maxsize=1)
 def database():
-    return json.loads(files('veryflashy').joinpath('data/nand.json').read_text())
+    data = files('veryflashy').joinpath('data')
+    db = json.loads(data.joinpath('nand.json').read_text())
+    curated = json.loads(data.joinpath('nand-curated.json').read_text())
+    db['records'].extend(curated['records'])
+    db['curated_sources'] = curated['sources']
+    return db
 
 
 def decode(flash_id):
@@ -33,7 +38,7 @@ def decode(flash_id):
         required = [(i, v) for i, v in enumerate(record['pattern']) if v is not None]
         if all(i < len(flash_id) and flash_id[i] == v for i, v in required):
             matches.append({**record, 'matched_bytes': len(required)})
-    matches.sort(key=lambda r: (-r['matched_bytes'], r['source'], r['line']))
+    matches.sort(key=lambda r: (-r['matched_bytes'], r['source'], r.get('line', 0)))
     return {
         'id': flash_id.hex(),
         'manufacturer': db['manufacturers'].get(f'{flash_id[0]:02x}'),
@@ -55,12 +60,20 @@ def print_summary(flash_id):
         return
     print('  Database candidates (ID patterns do not uniquely identify a package):')
     for candidate in result['candidates']:
+        source = candidate['source']
+        if 'line' in candidate:
+            source += f':{candidate["line"]}'
         print(f'    {candidate["description"]} '
-              f'[{candidate["source"]}:{candidate["line"]}; '
+              f'[{source}; '
               f'{candidate["matched_bytes"]} specified ID bytes matched]')
+        if 'family' in candidate:
+            print(f'      Die family: {candidate["family"]} | '
+                  f'{candidate["layers"]}-layer {candidate["cell_type"]} | '
+                  f'{candidate["die_capacity_bytes"] / 2**30:g} GiB raw/die')
         if 'capacity_bytes' in candidate:
             print(f'      Database geometry: {candidate["capacity_bytes"]} bytes total, '
                   f'{candidate["page_bytes"]} bytes/page + '
                   f'{candidate["spare_bytes"]} spare, '
                   f'{candidate["erase_bytes"]} bytes/erase block')
-    print('  Cell type and die count are not inferred. Geometry is not USB capacity.')
+    print('  Unlisted properties and physical die count remain unknown. '
+          'NAND density is not USB capacity.')

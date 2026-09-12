@@ -1,11 +1,17 @@
 Bundled NAND identification database
 ===================================
 
-The combined nand.json database is distributed under GPL-3.0-only.
+The imported nand.json database is distributed under GPL-3.0-only.
 See GPL-3.0.txt for the full license. The surrounding veryflashy code remains
 GPL-3.0-or-later. Upstream GPL-2.0-or-later material is used under GPL version 3.
 Exact source revisions, original licenses, download URLs and SHA-256 checksums
 are recorded in nand-sources.json. Each candidate records its source line.
+
+The separately authored nand-curated.json factual entries are GPL-3.0-or-later.
+Their references document the evidence; no third-party licensing grant is
+claimed for the referenced publications. No MPTool database records, firmware
+parameters, catalog prose or report text are included. See docs/micron-b58r.md.
+Curated candidates use stable source keys instead of imported source lines.
 
 NANDO (bbogush/nand_programmer)
   Copyright (C) 2020 NANDO authors

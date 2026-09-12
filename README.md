@@ -39,12 +39,15 @@ veryflashy --decode-id 2c-d3-08-32-e8-30-12
 ```text
 NAND decode for 2c-d3-08-32-e8-30-12 (offline):
   Manufacturer: Micron (ID 0x2c)
-  No part match in the bundled database.
-  Part number, geometry and cell type remain unknown.
+  Database candidates (ID patterns do not uniquely identify a package):
+    MT29F1T08EBLCH [micron-b58r; 7 specified ID bytes matched]
+      Die family: B58R | 232-layer TLC | 128 GiB raw/die
+  Unlisted properties and physical die count remain unknown. NAND density is not USB capacity.
 ```
 
 The database includes 158 patterns from GPL-compatible NANDO and Allwinner
-sources, plus manufacturer codes from OpenOCD. Matching parts are reported
+sources, a curated Micron B58R entry, and manufacturer codes from OpenOCD.
+Matching parts are reported
 as candidates with source attribution; NANDO entries also include geometry.
 See [decoder coverage, licenses and update instructions](docs/nand-decoder.md).
 

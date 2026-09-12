@@ -146,7 +146,8 @@ class CLITests(unittest.TestCase):
         with patch('sys.argv', ['veryflashy', '-l', '/dev/fake']):
             cli.main()
         self.assertIn('Manufacturer: Micron', self.output.getvalue())
-        self.assertIn('No part match', self.output.getvalue())
+        self.assertIn('MT29F1T08EBLCH', self.output.getvalue())
+        self.assertIn('B58R | 232-layer TLC | 128 GiB raw/die', self.output.getvalue())
         self.assertIn('decode for 2c-d3-08-32-e8-30-12', self.output.getvalue())
 
 
