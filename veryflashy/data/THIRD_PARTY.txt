@@ -1,0 +1,45 @@
+Bundled NAND identification database
+===================================
+
+The combined nand.json database is distributed under GPL-3.0-only.
+See GPL-3.0.txt for the full license. The surrounding veryflashy code remains
+GPL-3.0-or-later. Upstream GPL-2.0-or-later material is used under GPL version 3.
+Exact source revisions, original licenses, download URLs and SHA-256 checksums
+are recorded in nand-sources.json. Each candidate records its source line.
+
+NANDO (bbogush/nand_programmer)
+  Copyright (C) 2020 NANDO authors
+  License: GNU General Public License version 3.
+  Source: qt/nando_parallel_chip_db.csv
+  License evidence: repository LICENSE.txt, README.md License section, and
+  qt/chip_db.cpp header at revision 4d840b7afff7c1a1c02eacce3a72761cd0f58c93.
+  Changes: select IDs, part names and geometry; convert decimal IDs to JSON
+  byte patterns, representing unspecified '-' bytes as null. Omit all
+  programming commands, timings and other hardware configuration fields.
+
+Allwinner NAND table (linux-sunxi/linux-sunxi)
+  (C) Copyright 2007-2012
+  Allwinner Technology Co., Ltd. <www.allwinnertech.com>
+  License: GPL-2.0-or-later, explicitly granted in the source-file header.
+  Source: drivers/block/sunxi_nand/src/scan/nand_id.c
+  Changes: extract ID patterns and original descriptive comments; derive
+  manufacturer labels from table names. Convert wildcard 0xff bytes to null.
+  Omit sentinel entries, geometry, operational parameters and all executable
+  code. Descriptions can denote families, multiple parts or interface notes.
+
+OpenOCD manufacturer tables (openocd-org/openocd)
+  Copyright (C) 2007 by Dominic Rath <Dominic.Rath@gmx.de>
+  Copyright (C) 2002 Thomas Gleixner <tglx@linutronix.de>
+  Copyright (C) 2009 Zachary T Welch <zw@superlucidity.net>
+  Partially based on drivers/mtd/nand_ids.c from Linux.
+  Header additionally credits linux/include/linux/mtd/nand.h:
+  Copyright (C) 2000 David Woodhouse <dwmw2@mvhi.com>
+  Copyright (C) 2000 Steven J. Hill <sjhill@realitydiluted.com>
+  Copyright (C) 2000 Thomas Gleixner <tglx@linutronix.de>
+  License: GPL-2.0-or-later (SPDX in both source files).
+  Sources: src/flash/nand/core.c and core.h
+  Changes: extract manufacturer names and numerical IDs into JSON. Do not
+  import the legacy device-ID capacity table or any executable code.
+
+These data are provided WITHOUT ANY WARRANTY, including the implied warranties
+of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See GPL-3.0.txt.

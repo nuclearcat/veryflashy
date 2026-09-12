@@ -1,0 +1,3 @@
+include tools/import_nand_db.py
+recursive-include docs *.md
+recursive-include tests *.py *.json

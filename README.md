@@ -28,28 +28,25 @@ the size of the flash in 512-byte blocks.
 
 Check out this repository, then `sudo uv run veryflashy /dev/sdX` in it
 (or `uv run sudo --preserve-env=PATH python -m veryflashy /dev/sdX`).
-If the optional `veryflashy.fdnext` module is available, add the `-l` option to look up information about the identity of the
-NAND flash chip at [FlashMaster online](https://fm.itxtech.org/en):
+NAND IDs are automatically decoded using the bundled offline database.
+The `-l` / `--lookup` option is still accepted and now uses this same database.
+You can also decode an ID without a device or root:
 
+```sh
+veryflashy --decode-id 2c-d3-08-32-e8-30-12
 ```
-$ sudo veryflashy -l /dev/sdb
-Reading standard SCSI disk capacity (SCSI command 25 ...):
-  SCSI block size 512 x 15663104 = 8.0 GB
-Reading standard SCSI block limits (SCSI command 23 ...):
-  SCSI block size 512 x 15663104 = 8.0 GB
-Reading vendor info (SCSI command 06 05 ...):
-  Phison chip ID: PS2251-32 (raw value 2232)
-  Phison firmware version/date: 1.5.16
-  Phison f1f2: ff01 (NOT SURE WHAT THIS IS)
-  Phison USB ID 13fe:1f23
-Reading vendor info (SCSI command 06 05 49 4e 46 4f):
-  Phison split mode 3, split at 0 blocks
-  (See https://gist.github.com/warewolf/e19d6817f1d59939a32fbd9e1a30b9d2 for what this means)
-Reading flash ID (06 56), this can take a while:
-  Flash ID 89-d7-d5-3e-78-00
-NAND flash chip summary for 89d7d53e7800: Intel | 4GB MLC | 2 die | 1 planes
-More info: https://fm.itxtech.org/en/ids/89d7d53e7800
+
+```text
+NAND decode for 2c-d3-08-32-e8-30-12 (offline):
+  Manufacturer: Micron (ID 0x2c)
+  No part match in the bundled database.
+  Part number, geometry and cell type remain unknown.
 ```
+
+The database includes 158 patterns from GPL-compatible NANDO and Allwinner
+sources, plus manufacturer codes from OpenOCD. Matching parts are reported
+as candidates with source attribution; NANDO entries also include geometry.
+See [decoder coverage, licenses and update instructions](docs/nand-decoder.md).
 
 For ASolid drives, use `sudo uv run veryflashy -m asolid /dev/sdX`, or leave
 out `-m` for automatic detection. The detector checks the extended SCSI

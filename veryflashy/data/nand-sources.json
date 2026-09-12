@@ -1,0 +1,26 @@
+{
+  "nando.csv": {
+    "url": "https://raw.githubusercontent.com/bbogush/nand_programmer/4d840b7afff7c1a1c02eacce3a72761cd0f58c93/qt/nando_parallel_chip_db.csv",
+    "revision": "4d840b7afff7c1a1c02eacce3a72761cd0f58c93",
+    "license": "GPL-3.0-only",
+    "sha256": "1a8ab2ebb68f49b297239d22c3258e24098211b190ba059076ab8bc1ff0f179b"
+  },
+  "openocd-core.c": {
+    "url": "https://raw.githubusercontent.com/openocd-org/openocd/18674aaeb40e644f329285c0927f4abba86a56c5/src/flash/nand/core.c",
+    "revision": "18674aaeb40e644f329285c0927f4abba86a56c5",
+    "license": "GPL-2.0-or-later",
+    "sha256": "50f2a19d907d25a444bf18ccaf5305745b73de5129889ba96182a1df97947003"
+  },
+  "openocd-core.h": {
+    "url": "https://raw.githubusercontent.com/openocd-org/openocd/18674aaeb40e644f329285c0927f4abba86a56c5/src/flash/nand/core.h",
+    "revision": "18674aaeb40e644f329285c0927f4abba86a56c5",
+    "license": "GPL-2.0-or-later",
+    "sha256": "0a2fa5d68445165211afb07ed1616c41ed0fbd619137ec4a01911e5eaeeb42e9"
+  },
+  "sunxi-nand_id.c": {
+    "url": "https://raw.githubusercontent.com/linux-sunxi/linux-sunxi/d47d367036be38c5180632ec8a3ad169a4593a88/drivers/block/sunxi_nand/src/scan/nand_id.c",
+    "revision": "d47d367036be38c5180632ec8a3ad169a4593a88",
+    "license": "GPL-2.0-or-later",
+    "sha256": "c622e84afb56367eb9b03ec56c0c247a1a446261043411ed82ab1c8aa0d54585"
+  }
+}

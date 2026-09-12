@@ -50,9 +50,9 @@ def probe(fd: int):
         if slot[0] in (0x00, 0xff):
             continue
         print(f'  Flash ID (slot {offset // 8}): {slot[:7].hex(sep="-")}')
-        flashids.append(slot[:6])
+        flashids.append(slot[:7])
 
     if not flashids:
         raise RuntimeError('ASolid returned no usable NAND IDs')
-    # Match the existing detectors' six-byte ID contract for online lookup.
+    # Preserve every displayed ID byte for the offline decoder.
     return flashids[0]

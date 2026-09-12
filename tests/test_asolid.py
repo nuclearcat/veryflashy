@@ -2,7 +2,6 @@ import contextlib
 import io
 import json
 from pathlib import Path
-import sys
 import unittest
 from unittest.mock import patch
 
@@ -25,7 +24,7 @@ class ASolidTests(unittest.TestCase):
 
     def test_capture_replay(self):
         self.read.side_effect = [INQUIRY, INFO, IDS]
-        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e830'))
+        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
         self.assertEqual(self.read.call_args_list, [
             unittest.mock.call(7, bytes.fromhex(CAPTURE[name]['cdb']), size)
             for name, size in (('inquiry', 96), ('firmware_info', 512), ('nand_ids', 512))
@@ -71,12 +70,12 @@ class ASolidTests(unittest.TestCase):
 
     def test_zero_padded_firmware_response(self):
         self.read.side_effect = [INQUIRY, INFO.ljust(512, b'\0'), IDS]
-        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e830'))
+        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
 
     def test_id_in_later_slot_and_ff_padding(self):
         data = b'\xff' * 8 + b'\0' * 8 + IDS[16:24] + b'\xff' * 104
         self.read.side_effect = [INQUIRY, INFO, data]
-        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e830'))
+        self.assertEqual(asolid.probe(7), bytes.fromhex('2cd30832e83012'))
         self.assertEqual(self.output.getvalue().count('Flash ID (slot'), 1)
         self.assertIn('slot 2)', self.output.getvalue())
 
@@ -142,17 +141,13 @@ class CLITests(unittest.TestCase):
         for probe in self.others[1:]:
             probe.assert_not_called()
 
-    def test_unavailable_lookup_fails_before_device_access(self):
-        errors = io.StringIO()
-        with patch.dict(sys.modules, {'veryflashy.fdnext': None}), \
-                patch('sys.argv', ['veryflashy', '-l', '/dev/fake']), \
-                contextlib.redirect_stderr(errors):
-            with self.assertRaises(SystemExit) as exc:
-                cli.main()
-        self.assertEqual(exc.exception.code, 2)
-        self.assertIn('optional veryflashy.fdnext module', errors.getvalue())
-        cli.os.open.assert_not_called()
-        self.read.assert_not_called()
+    def test_lookup_uses_offline_database(self):
+        self.read.side_effect = [INQUIRY, INFO, IDS]
+        with patch('sys.argv', ['veryflashy', '-l', '/dev/fake']):
+            cli.main()
+        self.assertIn('Manufacturer: Micron', self.output.getvalue())
+        self.assertIn('No part match', self.output.getvalue())
+        self.assertIn('decode for 2c-d3-08-32-e8-30-12', self.output.getvalue())
 
 
 if __name__ == '__main__':

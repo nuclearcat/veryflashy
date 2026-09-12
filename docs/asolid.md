@@ -40,7 +40,8 @@ and byte 6 to 7, and requests 512 bytes through the SPTI wrapper at
 
 MPTool copies the first 128 bytes as eight-byte ID slots. The detector
 prints seven ID bytes for each nonempty slot, then returns the first
-usable six-byte ID for compatibility with existing detectors and lookup.
+usable seven-byte ID for offline decoding. Other detectors may return fewer
+bytes; the decoder does not invent missing bytes.
 Slots whose manufacturer byte is zero or `ff` are omitted. Repeated IDs
 remain visible; slot positions are not interpreted as physical topology.
 
